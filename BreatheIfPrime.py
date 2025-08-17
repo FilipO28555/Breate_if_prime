@@ -46,7 +46,6 @@ def plot_tensor(tensor, name='Tensor Visualization', size=3, save_path=None):
     
     return tensor_np
 
-# plot_tensor(create_tensor(3, 5))
 
 N = 100 # breath girth
 M = 100 # lung capacity
@@ -184,13 +183,104 @@ def create_video_from_frames(frames_dir, output_path, fps=10):
     video.release()
     print(f"Video saved to {output_path}")
 
+def create_combined_frames(air_frames_dir, steps_frames_dir, combined_frames_dir):
+    """Create side-by-side combined frames from air and steps frames"""
+    if not os.path.exists(combined_frames_dir):
+        os.makedirs(combined_frames_dir, exist_ok=True)
+    
+    air_files = sorted([f for f in os.listdir(air_frames_dir) if f.endswith('.png')])
+    steps_files = sorted([f for f in os.listdir(steps_frames_dir) if f.endswith('.png')])
+    
+    if len(air_files) != len(steps_files):
+        print(f"Warning: Mismatched frame counts - Air: {len(air_files)}, Steps: {len(steps_files)}")
+        return
+    
+    print(f"Creating {len(air_files)} combined frames...")
+    
+    for i, (air_file, steps_file) in enumerate(zip(air_files, steps_files)):
+        # Read both frames
+        air_frame = cv2.imread(os.path.join(air_frames_dir, air_file))
+        steps_frame = cv2.imread(os.path.join(steps_frames_dir, steps_file))
+        
+        if air_frame is None or steps_frame is None:
+            print(f"Error reading frame {i}")
+            continue
+        
+        # Ensure both frames have the same height
+        height = max(air_frame.shape[0], steps_frame.shape[0])
+        air_frame = cv2.resize(air_frame, (air_frame.shape[1], height))
+        steps_frame = cv2.resize(steps_frame, (steps_frame.shape[1], height))
+        
+        # Combine frames side by side
+        combined_frame = np.hstack([air_frame, steps_frame])
+        
+        # Save combined frame
+        combined_path = os.path.join(combined_frames_dir, f"combined_{i:04d}.png")
+        cv2.imwrite(combined_path, combined_frame)
+    
+    print(f"Combined frames saved to {combined_frames_dir}")
+
+def create_gif_from_frames(frames_dir, output_path, fps=10):
+    """Create GIF from frames using OpenCV and save as GIF"""
+    try:
+        from PIL import Image
+        
+        frame_files = sorted([f for f in os.listdir(frames_dir) if f.endswith('.png')])
+        if not frame_files:
+            print(f"No frames found in {frames_dir}")
+            return
+        
+        # Load all frames
+        frames = []
+        for frame_file in frame_files:
+            frame_path = os.path.join(frames_dir, frame_file)
+            # Convert BGR to RGB for PIL
+            frame_bgr = cv2.imread(frame_path)
+            frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            pil_frame = Image.fromarray(frame_rgb)
+            frames.append(pil_frame)
+        
+        # Calculate duration per frame in milliseconds
+        duration_ms = int((1000 / fps))
+        
+        # Save as GIF
+        frames[0].save(
+            output_path,
+            save_all=True,
+            append_images=frames[1:],
+            duration=duration_ms,
+            loop=0  # Loop forever
+        )
+        print(f"GIF saved to {output_path}")
+        
+    except ImportError:
+        print("PIL (Pillow) not available. Install with: pip install Pillow")
+        print("Falling back to MP4 creation...")
+        # Fallback to MP4 if PIL not available
+        mp4_path = output_path.replace('.gif', '.mp4')
+        create_video_from_frames(frames_dir, mp4_path, fps)
+
 # Create videos from saved frames (only if saving was enabled)
 if save_video:
     print("\nCreating videos from saved frames...")
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
+    
+    # Create individual MP4 videos
     create_video_from_frames(air_frames_dir, os.path.join(output_dir, "air_simulation.mp4"))
     create_video_from_frames(steps_frames_dir, os.path.join(output_dir, "steps_simulation.mp4"))
+    
+    # Create combined side-by-side frames
+    combined_frames_dir = os.path.join(output_dir, "combined_frames")
+    create_combined_frames(air_frames_dir, steps_frames_dir, combined_frames_dir)
+    
+    # Create combined MP4 and GIF
+    create_video_from_frames(combined_frames_dir, os.path.join(output_dir, "combined_simulation.mp4"))
+    create_gif_from_frames(combined_frames_dir, os.path.join(output_dir, "combined_simulation.gif"), fps=24)
+
+    # Also create individual GIFs
+    create_gif_from_frames(air_frames_dir, os.path.join(output_dir, "air_simulation.gif"), fps=24)
+    create_gif_from_frames(steps_frames_dir, os.path.join(output_dir, "steps_simulation.gif"), fps=24)
 
 
 # plot and save the y data
@@ -198,11 +288,11 @@ print(f"\nSimulation completed!")
 print(f"lung capacity: {M}, breath girth: {N}, seconds alive: {steps_in[0,M-1]}")
 
 plt.figure(figsize=(10, 6))
-plt.plot(y)
+plt.plot(N*M-np.array(y))
 method_name = "Prime Step Method" if method_choice == 1 else "Gap Method"
-plt.title(f'Number of Alive Entities Over Time ({method_name})')
+plt.title(f'Number of dead Entities Over Time')
 plt.xlabel('Simulation Steps')
-plt.ylabel('Number of Alive Entities')
+plt.ylabel('Number of dead Entities')
 plt.grid(True)
 
 if save_video:
@@ -220,7 +310,11 @@ plt.show()
 if save_video:
     print(f"\nAll outputs saved to '{output_dir}' directory:")
     print(f"- air_simulation.mp4: Video of air levels")
+    print(f"- air_simulation.gif: GIF of air levels")
     print(f"- steps_simulation.mp4: Video of survival times")
+    print(f"- steps_simulation.gif: GIF of survival times")
+    print(f"- combined_simulation.mp4: Side-by-side video")
+    print(f"- combined_simulation.gif: Side-by-side GIF")
     print(f"- alive_entities_plot.png: Plot of alive entities over time")
     print(f"- alive_entities_data.txt: Raw data of alive entities")
 else:

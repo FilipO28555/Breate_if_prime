@@ -1,5 +1,6 @@
-torch  
+# torch  # install from https://pytorch.org/get-started/locally/
 opencv-python  
 sympy  
 numpy  
 matplotlib 
+Pillow
