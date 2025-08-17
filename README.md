@@ -1,7 +1,10 @@
 # Prime Breathing Simulation  
 A PyTorch-based simulation that visualizes breathing patterns based on prime numbers and prime gaps.  
 Please have fun creating new ways to visualize this and finding new patterns in primes.
+
+![Prime Breathing Simulation](All.gif)
   
+On the left is the time untill death of each enity. On the right we have how much air each entity has left. The simulation ends when all entities run out of air.
 ## Description  
   
 This project simulates a breathing mechanism where:
