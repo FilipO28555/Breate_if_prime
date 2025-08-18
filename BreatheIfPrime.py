@@ -11,6 +11,8 @@ device = "cpu" # cpu is just faster probably
 # Choose method: 1 for prime step method, 2 for gap method
 method_choice = 2
 save_video = True
+N = 100 # breath girth
+M = 100 # lung capacity
 
 # Create output directory for frames (only if saving video)
 output_dir = "output"
@@ -24,15 +26,16 @@ else:
     print("\nVideo saving disabled - running visualization only")
 
 # create NxM tensor:
-# the first row contains the numbers from 1q to M,
-# the second row contains the numbers from 1 to M,
+# All rows contain the numbers from 1 to M,
 def create_tensor(N, M):
     return torch.tensor([[j for j in range(1, M + 1)] for i in range(N)], device=device)
-
+# each column contains the numbers from N-1 to 0,
+# the first row contains the number N-1
+# the last should be 0
 def create_add_tensor(N, M):
     return torch.tensor([[N-1-i for j in range(1, M + 1)] for i in range(N)], device=device)   
 
-def plot_tensor(tensor, name='Tensor Visualization', size=3, save_path=None):
+def plot_tensor(tensor, name='Tensor Visualization', size=5, save_path=None):
     tensor_np = torch.log10(tensor+1).cpu().numpy()
     tensor_np = (tensor_np - tensor_np.min()) / (tensor_np.max() - tensor_np.min()) * 255
     tensor_np = tensor_np.astype('uint8')
@@ -47,8 +50,6 @@ def plot_tensor(tensor, name='Tensor Visualization', size=3, save_path=None):
     return tensor_np
 
 
-N = 100 # breath girth
-M = 100 # lung capacity
 start_values = create_tensor(N, M)
 add_tensor = create_add_tensor(N, M)
 Air = create_tensor(N, M)
@@ -71,7 +72,7 @@ def step(breath):
 if method_choice == 2:  # Only calculate gaps if gap method is chosen
     maxPrime = 20971520
     maxGap = 0
-    while maxGap < M:
+    while maxGap < min(M,N): #should be max but min is faster
         maxPrime *= 2
         primes = np.array(list(sieve.primerange(2,maxPrime)))
         gaps = primes[1:]-primes[:-1]
@@ -184,7 +185,7 @@ def create_video_from_frames(frames_dir, output_path, fps=10):
     print(f"Video saved to {output_path}")
 
 def create_combined_frames(air_frames_dir, steps_frames_dir, combined_frames_dir):
-    """Create side-by-side combined frames from air and steps frames"""
+    """Create combined frames from air and steps frames with intelligent layout"""
     if not os.path.exists(combined_frames_dir):
         os.makedirs(combined_frames_dir, exist_ok=True)
     
@@ -195,7 +196,16 @@ def create_combined_frames(air_frames_dir, steps_frames_dir, combined_frames_dir
         print(f"Warning: Mismatched frame counts - Air: {len(air_files)}, Steps: {len(steps_files)}")
         return
     
-    print(f"Creating {len(air_files)} combined frames...")
+    # Read first frame to determine layout
+    first_air = cv2.imread(os.path.join(air_frames_dir, air_files[0]))
+    width, height = first_air.shape[:2]
+
+    # Choose layout based on aspect ratio
+    use_horizontal = width >= height  # Side by side if wider than tall
+    layout_description = "side-by-side" if use_horizontal else "top-bottom"
+    
+    print(f"Frame dimensions: {width}x{height}")
+    print(f"Creating {len(air_files)} combined frames using {layout_description} layout...")
     
     for i, (air_file, steps_file) in enumerate(zip(air_files, steps_files)):
         # Read both frames
@@ -206,19 +216,24 @@ def create_combined_frames(air_frames_dir, steps_frames_dir, combined_frames_dir
             print(f"Error reading frame {i}")
             continue
         
-        # Ensure both frames have the same height
-        height = max(air_frame.shape[0], steps_frame.shape[0])
-        air_frame = cv2.resize(air_frame, (air_frame.shape[1], height))
-        steps_frame = cv2.resize(steps_frame, (steps_frame.shape[1], height))
-        
-        # Combine frames side by side
-        combined_frame = np.hstack([air_frame, steps_frame])
+        if use_horizontal:
+            # Side by side: match heights, keep original widths
+            target_height = max(air_frame.shape[0], steps_frame.shape[0])
+            air_frame = cv2.resize(air_frame, (air_frame.shape[1], target_height))
+            steps_frame = cv2.resize(steps_frame, (steps_frame.shape[1], target_height))
+            combined_frame = np.hstack([air_frame, steps_frame])
+        else:
+            # Top to bottom: match widths, keep original heights
+            target_width = max(air_frame.shape[1], steps_frame.shape[1])
+            air_frame = cv2.resize(air_frame, (target_width, air_frame.shape[0]))
+            steps_frame = cv2.resize(steps_frame, (target_width, steps_frame.shape[0]))
+            combined_frame = np.vstack([air_frame, steps_frame])
         
         # Save combined frame
         combined_path = os.path.join(combined_frames_dir, f"combined_{i:04d}.png")
         cv2.imwrite(combined_path, combined_frame)
     
-    print(f"Combined frames saved to {combined_frames_dir}")
+    print(f"Combined frames saved to {combined_frames_dir} using {layout_description} layout")
 
 def create_gif_from_frames(frames_dir, output_path, fps=10):
     """Create GIF from frames using OpenCV and save as GIF"""
