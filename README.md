@@ -1,4 +1,5 @@
 # Prime Breathing Simulation  
+Based on [CaryKH video](https://www.youtube.com/watch?v=IOcehCFJTmM).
 A PyTorch-based simulation that visualizes breathing patterns based on prime numbers and prime gaps.  
 Please have fun creating new ways to visualize this and finding new patterns in primes.
 
